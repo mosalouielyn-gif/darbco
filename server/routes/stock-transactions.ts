@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db.js';
 import { audit } from '../utils/helpers.js';
-import { ResultSetHeader } from 'mysql2';
+import { InsertResult } from '../config/db.js';
 
 const router = Router();
 
@@ -90,7 +90,7 @@ router.post('/', async (req: Request, res: Response) => {
       ]
     );
 
-    const txnId = (txnResult as ResultSetHeader).insertId;
+    const txnId = (txnResult as InsertResult).insertId;
 
     // Update inventory on_hand by signed quantity
     await connection.execute(

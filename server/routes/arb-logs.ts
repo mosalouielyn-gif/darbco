@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db.js';
-import { ResultSetHeader } from 'mysql2';
+import { InsertResult } from '../config/db.js';
 
 const router = Router();
 
@@ -62,7 +62,7 @@ router.post('/', async (req: Request, res: Response) => {
       [packing_date, beneficiary_id, block_no || null, recorded_by]
     );
 
-    const logId = (logResult as ResultSetHeader).insertId;
+    const logId = (logResult as InsertResult).insertId;
 
     for (const carrero of carreros) {
       await connection.execute(

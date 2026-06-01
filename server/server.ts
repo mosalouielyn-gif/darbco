@@ -53,8 +53,12 @@ app.use('/api/audit-logs', auditLogsRouter);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+export default app;
+
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
   console.log(`✓ DARBCO Server running on http://localhost:${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✓ Database: ${process.env.DB_NAME || 'darbco'}`);
-});
+  });
+}

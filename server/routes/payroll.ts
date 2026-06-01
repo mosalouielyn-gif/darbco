@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db.js';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { InsertResult } from '../config/db.js';
 
 const router = Router();
 
@@ -62,7 +62,7 @@ router.post('/', async (req: Request, res: Response) => {
       [batch_no, period_start, period_end, prepared_by, total]
     );
 
-    const batchId = (batchResult as ResultSetHeader).insertId;
+    const batchId = (batchResult as InsertResult).insertId;
 
     if (slips.length > 0) {
       for (const slip of slips) {
