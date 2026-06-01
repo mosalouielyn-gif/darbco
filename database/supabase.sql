@@ -234,7 +234,7 @@ CREATE TABLE payroll_batches (
   batch_no        VARCHAR(40)  NOT NULL UNIQUE,
   period_start    DATE NOT NULL,
   period_end      DATE NOT NULL,
-  status          VARCHAR(30) NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft','Submitted','Validated','Returned','Approved','Rejected','Released')),
+  status          VARCHAR(40) NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft','Ready for Submission','Submitted for Validation','Returned for Correction','Validated','Pending Manager Approval','Approved','Rejected','Released')),
   prepared_by     INTEGER NOT NULL,
   validated_by    INTEGER NULL,
   validated_at    TIMESTAMP NULL,

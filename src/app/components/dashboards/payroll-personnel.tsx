@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { User } from "../types";
 import { toast } from "sonner";
+import { createPayrollBatch, fetchBeneficiaries } from "../../lib/db-helpers";
 
 interface Props { user: User; onLogout: () => void }
 
@@ -131,6 +132,53 @@ function computeSlip(s: Pick<PayrollSlip, "classA" | "classB" | "special" | "mat
   return { subA, subB, subSpecial, gross, matTotal, otherTotal, totalDed, net };
 }
 
+function payrollPeriodDates(period: string) {
+  if (period.includes("May 16")) return { period_start: "2026-05-16", period_end: "2026-05-31" };
+  if (period.includes("May 1")) return { period_start: "2026-05-01", period_end: "2026-05-15" };
+  const today = new Date().toISOString().slice(0, 10);
+  return { period_start: today, period_end: today };
+}
+
+async function persistPayrollSlip(slip: PayrollSlip, preparedById: number, status: string) {
+  const beneficiaries = await fetchBeneficiaries();
+  const beneficiary = beneficiaries.find((b) => b.code === slip.beneficiaryId);
+
+  if (!beneficiary) {
+    throw new Error(`Beneficiary ${slip.beneficiaryId} was not found in Supabase.`);
+  }
+
+  const computed = computeSlip(slip);
+  const { period_start, period_end } = payrollPeriodDates(slip.payrollPeriod);
+
+  await createPayrollBatch({
+    batch_no: slip.slipNo,
+    period_start,
+    period_end,
+    status,
+    prepared_by: preparedById,
+    slips: [{
+      slip_no: slip.slipNo,
+      beneficiary_id: beneficiary.id,
+      payroll_period: slip.payrollPeriod,
+      harvest_date: slip.harvestDate,
+      class_a_boxes: slip.classA,
+      class_b_boxes: slip.classB,
+      special_boxes: slip.special,
+      class_a_price: PRICES.A,
+      class_b_price: PRICES.B,
+      special_price: PRICES.special,
+      material_deduction: computed.matTotal,
+      previous_balance: slip.prevBalance,
+      labor_cost: slip.laborAmount,
+      other_deductions: computed.otherTotal,
+      gross_amount: computed.gross,
+      credit_deduction: computed.matTotal,
+      total_deductions: computed.totalDed,
+      net_amount: computed.net,
+    }],
+  });
+}
+
 export function PayrollPersonnelDashboard({ user, onLogout }: Props) {
   const [active, setActive] = useState("dashboard");
   const [slips, setSlips] = useState<PayrollSlip[]>(SEED_SLIPS);
@@ -138,7 +186,7 @@ export function PayrollPersonnelDashboard({ user, onLogout }: Props) {
   return (
     <DarbcoLayout user={user} onLogout={onLogout} navItems={NAV} active={active} onChange={setActive}>
       {active === "dashboard" && <Dashboard goTo={setActive} slips={slips} />}
-      {active === "beneficiary" && <BeneficiaryPayroll slips={slips} setSlips={setSlips} preparedBy={user.name} />}
+      {active === "beneficiary" && <BeneficiaryPayroll slips={slips} setSlips={setSlips} preparedBy={user.name} preparedById={Number(user.id)} />}
       {active === "history" && <PayrollHistory slips={slips} />}
       {active === "reports" && <Reports />}
     </DarbcoLayout>
@@ -246,10 +294,11 @@ function Kpi({ color, label, value, sub, onClick }: { color: string; label: stri
   );
 }
 
-function BeneficiaryPayroll({ slips, setSlips, preparedBy }: {
+function BeneficiaryPayroll({ slips, setSlips, preparedBy, preparedById }: {
   slips: PayrollSlip[];
   setSlips: (s: PayrollSlip[]) => void;
   preparedBy: string;
+  preparedById: number;
 }) {
   const [search, setSearch] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
@@ -260,15 +309,29 @@ function BeneficiaryPayroll({ slips, setSlips, preparedBy }: {
     return !q || `${s.slipNo} ${s.beneficiaryName} ${s.beneficiaryId}`.toLowerCase().includes(q);
   });
 
-  const submitSlip = (slipNo: string) => {
-    setSlips(slips.map((s) => (s.slipNo === slipNo ? { ...s, status: "Submitted for Validation" } : s)));
-    toast.success(`${slipNo} submitted to Finance Officer`);
+  const submitSlip = async (slipNo: string) => {
+    const slip = slips.find((s) => s.slipNo === slipNo);
+    if (!slip) return;
+    try {
+      await persistPayrollSlip(slip, preparedById, "Submitted for Validation");
+      setSlips(slips.map((s) => (s.slipNo === slipNo ? { ...s, status: "Submitted for Validation" } : s)));
+      toast.success(`${slipNo} submitted to Finance Officer`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to submit payroll");
+    }
   };
 
-  const saveDraft = (draft: PayrollSlip) => {
-    setSlips([draft, ...slips]);
-    toast.success(`${draft.slipNo} saved as draft`);
-    setOpenCreate(false);
+  const saveDraft = async (draft: PayrollSlip) => {
+    try {
+      await persistPayrollSlip(draft, preparedById, "Draft");
+      setSlips([draft, ...slips]);
+      toast.success(`${draft.slipNo} saved as draft`);
+      setOpenCreate(false);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to save payroll draft");
+    }
   };
 
   return (
@@ -364,7 +427,17 @@ function BeneficiaryPayroll({ slips, setSlips, preparedBy }: {
         preparedBy={preparedBy}
         nextSlipNo={`PB-2026-${String(slips.length + 1).padStart(4, "0")}`}
         onSaveDraft={saveDraft}
-        onSubmit={(slip) => { setSlips([{ ...slip, status: "Submitted for Validation" }, ...slips]); toast.success(`${slip.slipNo} submitted to Finance Officer`); setOpenCreate(false); }}
+        onSubmit={async (slip) => {
+          try {
+            await persistPayrollSlip(slip, preparedById, "Submitted for Validation");
+            setSlips([{ ...slip, status: "Submitted for Validation" }, ...slips]);
+            toast.success(`${slip.slipNo} submitted to Finance Officer`);
+            setOpenCreate(false);
+          } catch (error) {
+            console.error(error);
+            toast.error(error instanceof Error ? error.message : "Failed to submit payroll");
+          }
+        }}
       />
       <ViewPayrollDialog slip={view} onClose={() => setView(null)} />
     </div>

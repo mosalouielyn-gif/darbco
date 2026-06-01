@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DarbcoLayout } from "../darbco-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { User } from "../types";
 import { toast } from "sonner";
+import { fetchPayroll, updatePayrollStatus } from "../../lib/db-helpers";
 
 interface Props { user: User; onLogout: () => void }
 
@@ -41,6 +42,7 @@ interface ProductionSource {
 }
 
 interface FoSlip {
+  batchId?: number;
   slipNo: string;
   productionRecordId: string;
   beneficiaryId: string;
@@ -59,6 +61,54 @@ interface FoSlip {
   // Source-of-truth from Production Clerk (for verification)
   productionSource: ProductionSource;
   returnReason?: { category: string; reason: string; remarks?: string; returnedBy: string; dateReturned: string };
+}
+
+function mapBatchStatus(status: string): FoStatus {
+  if (status === "Submitted for Validation") return "Submitted to Finance";
+  if (status === "Returned for Correction") return "Returned for Correction";
+  if (status === "Pending Manager Approval" || status === "Validated") return "Pending Manager Approval";
+  if (status === "Approved" || status === "Released") return "Approved";
+  return "Submitted to Finance";
+}
+
+function mapPayrollBatch(batch: any): FoSlip {
+  const slip = batch.slips?.[0] || {};
+  const classA = Number(slip.class_a_boxes || 0);
+  const classB = Number(slip.class_b_boxes || 0);
+  const special = Number(slip.special_boxes || 0);
+
+  return {
+    batchId: Number(batch.id),
+    slipNo: slip.slip_no || batch.batch_no,
+    productionRecordId: slip.production_record_id ? String(slip.production_record_id) : "—",
+    beneficiaryId: slip.beneficiary_code || String(slip.beneficiary_id || "—"),
+    beneficiaryName: slip.beneficiary_name || "Unknown Beneficiary",
+    payrollPeriod: slip.payroll_period || `${batch.period_start} to ${batch.period_end}`,
+    harvestDate: slip.harvest_date || batch.period_end,
+    preparedBy: batch.prepared_by_name || "Payroll Personnel",
+    dateSubmitted: batch.validated_at || batch.period_end,
+    status: mapBatchStatus(batch.status),
+    classA,
+    classB,
+    special,
+    materialCredits: [],
+    laborDescription: "Labor cost",
+    laborAmount: Number(slip.labor_cost || 0),
+    laborRemarks: "",
+    laborEncodedBy: batch.prepared_by_name || "Payroll Personnel",
+    laborDateEncoded: batch.period_end,
+    prevBalance: Number(slip.previous_balance || 0),
+    otherDeductions: Number(slip.other_deductions || 0) > 0
+      ? [{ type: "Other Authorized", description: "Other authorized deductions", amount: Number(slip.other_deductions), ref: batch.batch_no }]
+      : [],
+    productionSource: { classA, classB, special },
+    returnReason: batch.return_reason ? {
+      category: "Returned payroll",
+      reason: batch.return_reason,
+      returnedBy: batch.validated_by_name || "Finance Officer",
+      dateReturned: batch.validated_at || "",
+    } : undefined,
+  };
 }
 
 const SEED: FoSlip[] = [
@@ -177,19 +227,39 @@ const ERROR_CATEGORIES = [
 
 export function FinanceOfficerDashboard({ user, onLogout }: Props) {
   const [active, setActive] = useState("dashboard");
-  const [slips, setSlips] = useState<FoSlip[]>(SEED);
+  const [slips, setSlips] = useState<FoSlip[]>([]);
   const [reviewSlip, setReviewSlip] = useState<FoSlip | null>(null);
+
+  useEffect(() => {
+    loadPayroll();
+  }, []);
+
+  const loadPayroll = async () => {
+    try {
+      const batches = await fetchPayroll();
+      setSlips((batches as any[]).map(mapPayrollBatch));
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load payroll records");
+    }
+  };
 
   const openReview = (slip: FoSlip) => setReviewSlip(slip);
   const closeReview = () => setReviewSlip(null);
 
-  const validate = (slipNo: string) => {
+  const validate = async (slipNo: string) => {
+    const slip = slips.find((s) => s.slipNo === slipNo);
+    if (!slip?.batchId) return;
+    await updatePayrollStatus(slip.batchId, { status: "Pending Manager Approval", validated_by: Number(user.id) });
     setSlips((cur) => cur.map((s) => s.slipNo === slipNo ? { ...s, status: "Pending Manager Approval" } : s));
     toast.success(`${slipNo} validated and forwarded to Manager`);
     closeReview();
   };
 
-  const returnSlip = (slipNo: string, payload: { category: string; reason: string; remarks?: string }) => {
+  const returnSlip = async (slipNo: string, payload: { category: string; reason: string; remarks?: string }) => {
+    const slip = slips.find((s) => s.slipNo === slipNo);
+    if (!slip?.batchId) return;
+    await updatePayrollStatus(slip.batchId, { status: "Returned for Correction", validated_by: Number(user.id), return_reason: payload.reason });
     setSlips((cur) => cur.map((s) => s.slipNo === slipNo ? {
       ...s, status: "Returned for Correction",
       returnReason: { ...payload, returnedBy: user.name, dateReturned: new Date().toISOString().slice(0, 16).replace("T", " ") },

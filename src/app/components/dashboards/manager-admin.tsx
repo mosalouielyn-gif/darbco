@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DarbcoLayout } from "../darbco-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { Role, ROLE_LABELS, User } from "../types";
 import { toast } from "sonner";
+import { fetchPayroll, updatePayrollStatus } from "../../lib/db-helpers";
 
 interface Props { user: User; onLogout: () => void }
 
@@ -33,6 +34,7 @@ const NAV = [
 ];
 
 interface PayrollRow {
+  batchId?: number;
   id: string; name: string; date: string; period: string; gross: number; deductions: number; net: number;
   validatedBy: string; status: "Validated" | "Approved" | "Returned";
   returnReason?: string;
@@ -103,17 +105,59 @@ const TOP_WORKERS = [
 
 export function ManagerAdminDashboard({ user, onLogout }: Props) {
   const [active, setActive] = useState("dashboard");
-  const [payroll, setPayroll] = useState(PAYROLL_SEED);
+  const [payroll, setPayroll] = useState<PayrollRow[]>([]);
   const [restock, setRestock] = useState(RESTOCK_SEED);
   const [audit, setAudit] = useState(AUDIT_SEED);
   const [users, setUsers] = useState(USERS_SEED);
 
-  const approvePayroll = (id: string) => {
+  useEffect(() => {
+    loadPayroll();
+  }, []);
+
+  const loadPayroll = async () => {
+    try {
+      const batches = await fetchPayroll();
+      const mapped = (batches as any[]).map((batch) => {
+        const slip = batch.slips?.[0] || {};
+        const gross = Number(slip.gross_amount || 0);
+        const deductions = Number(slip.total_deductions || 0);
+        return {
+          batchId: Number(batch.id),
+          id: slip.slip_no || batch.batch_no,
+          name: `${slip.beneficiary_name || "Unknown Beneficiary"} (${slip.beneficiary_code || slip.beneficiary_id || "—"})`,
+          date: slip.harvest_date || batch.period_end,
+          period: slip.payroll_period || `${batch.period_start} to ${batch.period_end}`,
+          gross,
+          deductions,
+          net: Number(slip.net_amount || gross - deductions),
+          validatedBy: batch.validated_by_name || "Finance Officer",
+          status: batch.status === "Approved" || batch.status === "Released" ? "Approved"
+            : batch.status === "Returned for Correction" ? "Returned"
+            : "Validated",
+          returnReason: batch.return_reason || undefined,
+        } satisfies PayrollRow;
+      });
+      setPayroll(mapped);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load payroll approvals");
+    }
+  };
+
+  const approvePayroll = async (id: string) => {
+    const row = payroll.find((r) => r.id === id);
+    if (row?.batchId) {
+      await updatePayrollStatus(row.batchId, { status: "Approved", approved_by: Number(user.id) });
+    }
     setPayroll((cur) => cur.map((r) => r.id === id ? { ...r, status: "Approved" } : r));
     setAudit((cur) => [{ ts: now(), user: user.name, action: "Approved", module: "Payroll", description: `Approved payroll ${id}`, status: "Completed" }, ...cur]);
     toast.success(`${id} approved`);
   };
-  const returnPayroll = (id: string, reason: string) => {
+  const returnPayroll = async (id: string, reason: string) => {
+    const row = payroll.find((r) => r.id === id);
+    if (row?.batchId) {
+      await updatePayrollStatus(row.batchId, { status: "Returned for Correction", approved_by: Number(user.id), return_reason: reason });
+    }
     setPayroll((cur) => cur.map((r) => r.id === id ? { ...r, status: "Returned", returnReason: reason } : r));
     setAudit((cur) => [{ ts: now(), user: user.name, action: "Returned", module: "Payroll", description: `Returned payroll ${id} — ${reason}`, status: "Returned" }, ...cur]);
     toast.success(`${id} returned for correction`);

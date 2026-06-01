@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../config/db.js';
 import { InsertResult } from '../config/db.js';
+import { audit } from '../utils/helpers.js';
 
 const router = Router();
 
@@ -46,7 +47,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   const connection = await pool.getConnection();
   try {
-    const { batch_no, period_start, period_end, prepared_by, slips = [] } = req.body;
+    const { batch_no, period_start, period_end, prepared_by, status = 'Draft', slips = [] } = req.body;
 
     if (!batch_no || !period_start || !period_end || !prepared_by) {
       return res.status(400).json({ error: 'batch_no, period_start, period_end, and prepared_by are required' });
@@ -57,9 +58,9 @@ router.post('/', async (req: Request, res: Response) => {
     const total = slips.reduce((sum: number, s: any) => sum + parseFloat(s.net_amount || 0), 0);
 
     const [batchResult] = await connection.execute(
-      `INSERT INTO payroll_batches (batch_no, period_start, period_end, prepared_by, total_amount)
-       VALUES (?, ?, ?, ?, ?)`,
-      [batch_no, period_start, period_end, prepared_by, total]
+      `INSERT INTO payroll_batches (batch_no, period_start, period_end, status, prepared_by, total_amount)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [batch_no, period_start, period_end, status, prepared_by, total]
     );
 
     const batchId = (batchResult as InsertResult).insertId;
@@ -104,10 +105,18 @@ router.post('/', async (req: Request, res: Response) => {
             slip.net_amount || 0,
           ]
         );
+
+        if (slip.production_record_id) {
+          await connection.execute(
+            `UPDATE production_records SET status = 'Used in Payroll' WHERE id = ?`,
+            [slip.production_record_id]
+          );
+        }
       }
     }
 
     await connection.commit();
+    await audit(prepared_by, 'Payroll', status === 'Submitted for Validation' ? 'SUBMIT' : 'CREATE', 'payroll_batches', String(batchId), `Payroll batch ${batch_no} saved with status ${status}`);
     res.json({ id: batchId, total_amount: total });
   } catch (error) {
     await connection.rollback();
@@ -150,6 +159,17 @@ router.put('/', async (req: Request, res: Response) => {
     params.push(id);
 
     await pool.execute(sql, params);
+
+    const actorId = approved_by || validated_by;
+    if (actorId) {
+      const action =
+        status === 'Approved' ? 'APPROVE'
+        : status === 'Returned for Correction' ? 'RETURN'
+        : status === 'Pending Manager Approval' || status === 'Validated' ? 'VALIDATE'
+        : 'UPDATE_STATUS';
+      await audit(actorId, 'Payroll', action, 'payroll_batches', String(id), return_reason || `Payroll status changed to ${status}`);
+    }
+
     res.json({ id });
   } catch (error) {
     console.error('Update payroll error:', error);

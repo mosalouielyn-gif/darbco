@@ -225,6 +225,7 @@ export const createPayrollBatch = (data: {
   batch_no: string;
   period_start: string;
   period_end: string;
+  status?: string;
   prepared_by: number;
   slips: Array<{
     slip_no?: string;
