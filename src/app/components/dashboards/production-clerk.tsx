@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import {
   LayoutDashboard, Package, Boxes, Users, TrendingUp, Plus, Search,
-  CheckCircle2, Edit, Trash2, ChevronLeft, ChevronRight, FileText, Eye, X,
-  ChevronDown, Save, FileBarChart2, ClipboardList, ArrowRight,
+  CheckCircle2, Edit, Trash2, ChevronLeft, ChevronRight, FileText, Eye,
+  Save, FileBarChart2, ArrowRight,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
@@ -18,9 +18,13 @@ import { User } from "../types";
 import { toast } from "sonner";
 import {
   createArbLog,
+  createBeneficiary,
   createDailyBoxes,
   createProductionRecord,
+  fetchArbLogs,
   fetchBeneficiaries,
+  fetchDailyBoxes,
+  fetchProduction,
 } from "../../lib/db-helpers";
 import {
   LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area,
@@ -87,14 +91,6 @@ const abbLogs = [
   { date: "May 30, 2026", beneficiary: "Benjie Ramos", harvester: "Agri Gold Farm", time: "06:10 AM", w11: 3, w12: 5, w13: 2, w14: 1, total: 11 },
 ];
 
-const harvestParams = [
-  { date: "May 30, 2026", cuttingDay: "Group A", crewSize: 12, styleCut: 248, crewRejects: 2, calibration: "Standard", recordedBy: "Production Clerk" },
-  { date: "May 30, 2026", cuttingDay: "Group A", crewSize: 14, styleCut: 312, crewRejects: 1, calibration: "Standard", recordedBy: "Production Clerk" },
-  { date: "May 30, 2026", cuttingDay: "Group B", crewSize: 10, styleCut: 196, crewRejects: 3, calibration: "Premium", recordedBy: "Production Clerk" },
-  { date: "May 27, 2026", cuttingDay: "Group B", crewSize: 11, styleCut: 224, crewRejects: 2, calibration: "Standard", recordedBy: "Production Clerk" },
-  { date: "May 26, 2026", cuttingDay: "Group C", crewSize: 9, styleCut: 178, crewRejects: 0, calibration: "Standard", recordedBy: "Production Clerk" },
-];
-
 const dailyBoxRecords = [
   { date: "May 30, 2026", firstBoxOut: "06:42 AM", lastBoxOut: "03:50 PM", classA: 2, classB: 1, special: 0, total: 3 },
 ];
@@ -105,6 +101,34 @@ const dailyPerBene = [
   { packingDate: "May 30, 2026", totalBeneficiaries: 4, dateRecorded: "May 29, 2026 06:13 PM" },
   { packingDate: "May 31, 2026", totalBeneficiaries: 3, dateRecorded: "May 29, 2026 04:36 AM" },
 ];
+
+type ArbLogDisplay = {
+  date: string;
+  beneficiary: string;
+  harvester: string;
+  time: string;
+  w11: number;
+  w12: number;
+  w13: number;
+  w14: number;
+  total: number;
+};
+
+type DailyBoxDisplay = {
+  date: string;
+  firstBoxOut: string;
+  lastBoxOut: string;
+  classA: number;
+  classB: number;
+  special: number;
+  total: number;
+};
+
+type DailyPerBeneDisplay = {
+  packingDate: string;
+  totalBeneficiaries: number;
+  dateRecorded: string;
+};
 
 export function ProductionClerkDashboard({ user, onLogout }: Props) {
   const [active, setActive] = useState("dashboard");
@@ -236,12 +260,6 @@ function Dashboard({ goToTab }: { goToTab: (tab: string) => void }) {
             onClick={() => goToTab("boxes")}
           />
           <ShortcutCard
-            icon={<ClipboardList className="h-5 w-5" />}
-            label="Harvest Parameters"
-            description="Stem, calibration, defects"
-            onClick={() => goToTab("params")}
-          />
-          <ShortcutCard
             icon={<Users className="h-5 w-5" />}
             label="Daily Production per Beneficiary"
             description="View beneficiaries by date"
@@ -301,19 +319,88 @@ function KpiCard({ icon, color, label, value, delta, onClick }: { icon: React.Re
 function ProductionRecords({ tab, setTab, user }: { tab: string; setTab: (t: string) => void; user: User }) {
   const [openArb, setOpenArb] = useState(false);
   const [openBoxes, setOpenBoxes] = useState(false);
-  const [openParams, setOpenParams] = useState(false);
   const [openBene, setOpenBene] = useState(false);
+  const [arbData, setArbData] = useState<ArbLogDisplay[]>(abbLogs);
+  const [boxData, setBoxData] = useState<DailyBoxDisplay[]>(dailyBoxRecords);
+  const [perBeneData, setPerBeneData] = useState<DailyPerBeneDisplay[]>(dailyPerBene);
+
+  const loadRecords = async () => {
+    try {
+      const [arbLogs, boxes, productionRecords] = await Promise.all([
+        fetchArbLogs(),
+        fetchDailyBoxes(),
+        fetchProduction(),
+      ]);
+
+      const mappedArb = (arbLogs as any[]).flatMap((log) => {
+        const carreros = Array.isArray(log.carreros) && log.carreros.length > 0 ? log.carreros : [{}];
+        return carreros.map((c: any) => {
+          const w11 = Number(c.w11 || 0);
+          const w12 = Number(c.w12 || 0);
+          const w13 = Number(c.w13 || 0);
+          const w14 = Number(c.w14 || 0);
+          return {
+            date: log.packing_date ? new Date(log.packing_date).toLocaleDateString() : "",
+            beneficiary: log.beneficiary_name || "—",
+            harvester: c.carrero_name || "—",
+            time: c.time_arrival || "—",
+            w11,
+            w12,
+            w13,
+            w14,
+            total: w11 + w12 + w13 + w14,
+          };
+        });
+      });
+      if (mappedArb.length > 0) setArbData(mappedArb);
+
+      const mappedBoxes = (boxes as any[]).map((box) => {
+        const classA = Number(box.class_a_total || 0);
+        const classB = Number(box.class_b_total || 0);
+        const special = Number(box.special_total || 0);
+        return {
+          date: box.packing_date ? new Date(box.packing_date).toLocaleDateString() : "",
+          firstBoxOut: box.first_box_at || "—",
+          lastBoxOut: box.last_box_at || "—",
+          classA,
+          classB,
+          special,
+          total: classA + classB + special,
+        };
+      });
+      if (mappedBoxes.length > 0) setBoxData(mappedBoxes);
+
+      const grouped = new Map<string, { count: number; recorded: string }>();
+      (productionRecords as any[]).forEach((record) => {
+        const key = record.packing_date ? new Date(record.packing_date).toLocaleDateString() : "";
+        if (!key) return;
+        const current = grouped.get(key) || { count: 0, recorded: record.recorded_at || "" };
+        grouped.set(key, { count: current.count + 1, recorded: current.recorded || record.recorded_at || "" });
+      });
+      const mappedPerBene = Array.from(grouped.entries()).map(([packingDate, value]) => ({
+        packingDate,
+        totalBeneficiaries: value.count,
+        dateRecorded: value.recorded ? new Date(value.recorded).toLocaleString() : "—",
+      }));
+      if (mappedPerBene.length > 0) setPerBeneData(mappedPerBene);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load production records");
+    }
+  };
+
+  useEffect(() => {
+    loadRecords();
+  }, []);
 
   const buttonLabel =
     tab === "arb" ? "New ARB Log"
     : tab === "boxes" ? "New Daily Boxes"
-    : tab === "params" ? "New Harvest Parameter"
     : "New Record";
 
   const onNew = () => {
     if (tab === "arb") setOpenArb(true);
     else if (tab === "boxes") setOpenBoxes(true);
-    else if (tab === "params") setOpenParams(true);
     else if (tab === "group") setOpenBene(true);
   };
 
@@ -330,20 +417,17 @@ function ProductionRecords({ tab, setTab, user }: { tab: string; setTab: (t: str
         <TabsList className="bg-white border w-full justify-start h-auto flex-wrap p-1">
           <TabsTrigger value="arb" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><CheckCircle2 className="h-4 w-4 mr-1" />Individual ARB Logs</TabsTrigger>
           <TabsTrigger value="boxes" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Daily Boxes Per Group</TabsTrigger>
-          <TabsTrigger value="params" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Harvest Parameters</TabsTrigger>
           <TabsTrigger value="group" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Daily Production per Beneficiary</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="arb"><AbbLogsPanel /></TabsContent>
-        <TabsContent value="boxes"><GroupBoxesPanel /></TabsContent>
-        <TabsContent value="params"><HarvestParamsPanel /></TabsContent>
-        <TabsContent value="group"><PerGroupPanel /></TabsContent>
+        <TabsContent value="arb"><AbbLogsPanel rows={arbData} /></TabsContent>
+        <TabsContent value="boxes"><GroupBoxesPanel rows={boxData} /></TabsContent>
+        <TabsContent value="group"><PerGroupPanel rows={perBeneData} /></TabsContent>
       </Tabs>
 
-      <NewArbLogDialog open={openArb} onOpenChange={setOpenArb} user={user} />
-      <NewDailyBoxesDialog open={openBoxes} onOpenChange={setOpenBoxes} user={user} />
-      <NewHarvestParameterDialog open={openParams} onOpenChange={setOpenParams} />
-      <NewDailyPerBeneficiaryDialog open={openBene} onOpenChange={setOpenBene} user={user} />
+      <NewArbLogDialog open={openArb} onOpenChange={setOpenArb} user={user} onSaved={loadRecords} />
+      <NewDailyBoxesDialog open={openBoxes} onOpenChange={setOpenBoxes} user={user} onSaved={loadRecords} />
+      <NewDailyPerBeneficiaryDialog open={openBene} onOpenChange={setOpenBene} user={user} onSaved={loadRecords} />
     </div>
   );
 }
@@ -398,7 +482,7 @@ function ActionCell() {
   );
 }
 
-function AbbLogsPanel() {
+function AbbLogsPanel({ rows }: { rows: ArbLogDisplay[] }) {
   return (
     <Card className="mt-3">
       <PanelHeader title="Daily Harvest Log" />
@@ -412,26 +496,20 @@ function AbbLogsPanel() {
               <TableHead className="text-center">11</TableHead><TableHead className="text-center">12</TableHead>
               <TableHead className="text-center">13</TableHead><TableHead className="text-center">14</TableHead>
               <TableHead className="text-center">Total</TableHead>
-              <TableHead className="text-center">Running TTL</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {abbLogs.map((r, i) => {
-              let running = 0;
-              for (let j = 0; j <= i; j++) running += abbLogs[j].total;
-              return (
+            {rows.map((r, i) => (
                 <TableRow key={i}>
                   <TableCell>{r.date}</TableCell><TableCell>{r.beneficiary}</TableCell>
                   <TableCell>{r.harvester}</TableCell><TableCell>{r.time}</TableCell>
                   <TableCell className="text-center">{r.w11}</TableCell><TableCell className="text-center">{r.w12}</TableCell>
                   <TableCell className="text-center">{r.w13}</TableCell><TableCell className="text-center">{r.w14}</TableCell>
                   <TableCell className="text-center"><strong>{r.total}</strong></TableCell>
-                  <TableCell className="text-center">{running}</TableCell>
                   <TableCell><ActionCell /></TableCell>
                 </TableRow>
-              );
-            })}
+              ))}
           </TableBody>
         </Table>
         <Pager />
@@ -440,54 +518,23 @@ function AbbLogsPanel() {
   );
 }
 
-function HarvestParamsPanel() {
-  return (
-    <Card className="mt-3">
-      <PanelHeader title="Harvest Parameters List" />
-      <CardContent>
-        <TableToolbar />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead><TableHead>Date</TableHead><TableHead>Cutting GRP</TableHead>
-              <TableHead>Crew Size</TableHead><TableHead>Stem Cut</TableHead>
-              <TableHead>Farm Rejects</TableHead><TableHead>Calibration</TableHead>
-              <TableHead>Recorded By</TableHead><TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {harvestParams.map((r, i) => (
-              <TableRow key={i}>
-                <TableCell>{i + 1}</TableCell><TableCell>{r.date}</TableCell><TableCell>{r.cuttingDay}</TableCell>
-                <TableCell>{r.crewSize}</TableCell><TableCell>{r.styleCut}</TableCell>
-                <TableCell>{r.crewRejects}</TableCell><TableCell>{r.calibration}</TableCell>
-                <TableCell>{r.recordedBy}</TableCell>
-                <TableCell><ActionCell /></TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <Pager />
-      </CardContent>
-    </Card>
-  );
-}
-
-function GroupBoxesPanel() {
+function GroupBoxesPanel({ rows }: { rows: DailyBoxDisplay[] }) {
+  const latest = rows[0] || { classA: 0, classB: 0, special: 0, total: 0, date: "—" };
+  const totalBoxes = latest.total || latest.classA + latest.classB + latest.special;
   return (
     <div className="space-y-4 mt-3">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <SmallStat label="Total Boxes Today" value="2" subtext="100.0% of all boxes" />
-        <SmallStat label="Class A Boxes" value="1" subtext="50.0% of total" />
-        <SmallStat label="Class B Boxes" value="1" subtext="50.0% of total" />
-        <SmallStat label="Special Product Boxes" value="0" subtext="0% of total" />
+        <SmallStat label="Total Boxes Today" value={String(totalBoxes)} subtext="100.0% of all boxes" />
+        <SmallStat label="Class A Boxes" value={String(latest.classA)} subtext={`${totalBoxes ? Math.round((latest.classA / totalBoxes) * 100) : 0}% of total`} />
+        <SmallStat label="Class B Boxes" value={String(latest.classB)} subtext={`${totalBoxes ? Math.round((latest.classB / totalBoxes) * 100) : 0}% of total`} />
+        <SmallStat label="Special Product Boxes" value={String(latest.special)} subtext={`${totalBoxes ? Math.round((latest.special / totalBoxes) * 100) : 0}% of total`} />
         <Card>
           <CardContent className="p-5 flex items-center gap-3">
             <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">📅</div>
             <div>
               <div className="text-muted-foreground text-xs">Date</div>
-              <div className="text-emerald-700">May 30, 2026</div>
-              <div className="text-xs text-muted-foreground">Today</div>
+              <div className="text-emerald-700">{latest.date}</div>
+              <div className="text-xs text-muted-foreground">Latest record</div>
             </div>
           </CardContent>
         </Card>
@@ -505,7 +552,7 @@ function GroupBoxesPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dailyBoxRecords.map((r, i) => (
+              {rows.map((r, i) => (
                 <TableRow key={i}>
                   <TableCell>{r.date}</TableCell><TableCell>{r.firstBoxOut}</TableCell><TableCell>{r.lastBoxOut}</TableCell>
                   <TableCell>{r.classA}</TableCell><TableCell>{r.classB}</TableCell>
@@ -567,7 +614,7 @@ const beneficiariesByDate: Record<string, PerBeneRow[]> = {
   ],
 };
 
-function PerGroupPanel() {
+function PerGroupPanel({ rows }: { rows: DailyPerBeneDisplay[] }) {
   const [viewing, setViewing] = useState<string | null>(null);
   const list = viewing ? beneficiariesByDate[viewing] || [] : [];
 
@@ -585,7 +632,7 @@ function PerGroupPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dailyPerBene.map((r, i) => (
+              {rows.map((r, i) => (
                 <TableRow key={i}>
                   <TableCell>{r.packingDate}</TableCell>
                   <TableCell className="text-center"><Badge className="bg-sky-100 text-sky-800">{r.totalBeneficiaries}</Badge></TableCell>
@@ -677,7 +724,50 @@ interface ArbRow { beneficiary: string; blk: string; carreros: CarreroEntry[] }
 
 const emptyCarrero = (): CarreroEntry => ({ name: "", time: "", w11: "", w12: "", w13: "", w14: "" });
 
-function NewArbLogDialog({ open, onOpenChange, user }: { open: boolean; onOpenChange: (o: boolean) => void; user: User }) {
+function normalizeName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function generatedBeneficiaryCode(index: number) {
+  return `B-${Date.now().toString().slice(-8)}${index}`;
+}
+
+async function findOrCreateBeneficiary(
+  beneficiaries: Awaited<ReturnType<typeof fetchBeneficiaries>>,
+  name: string,
+  blockNo?: string,
+  index = 0
+) {
+  const normalized = normalizeName(name);
+  let beneficiary = beneficiaries.find((b) => normalizeName(b.full_name) === normalized);
+
+  if (!beneficiary) {
+    beneficiary = beneficiaries.find((b) => normalizeName(b.full_name).includes(normalized));
+  }
+
+  if (beneficiary) return beneficiary;
+
+  const code = generatedBeneficiaryCode(index);
+  const created = await createBeneficiary({
+    code,
+    full_name: name.trim(),
+    block_no: blockNo || undefined,
+  });
+
+  const newBeneficiary = {
+    id: created.id,
+    code,
+    full_name: name.trim(),
+    block_no: blockNo || null,
+    contact_no: null,
+    address: null,
+    is_active: true,
+  };
+  beneficiaries.push(newBeneficiary);
+  return newBeneficiary;
+}
+
+function NewArbLogDialog({ open, onOpenChange, user, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; user: User; onSaved: () => Promise<void> }) {
   const today = new Date().toISOString().slice(0, 10);
   const [packingDate, setPackingDate] = useState(today);
   const empty: ArbRow = { beneficiary: "", blk: "", carreros: [emptyCarrero()] };
@@ -713,16 +803,10 @@ function NewArbLogDialog({ open, onOpenChange, user }: { open: boolean; onOpenCh
 
     try {
       const beneficiaries = await fetchBeneficiaries();
+      let savedCount = 0;
 
-      for (const row of rows) {
-        const beneficiary = beneficiaries.find(
-          b => b.full_name.toLowerCase().includes(row.beneficiary.toLowerCase())
-        );
-
-        if (!beneficiary) {
-          toast.error(`Beneficiary not found: ${row.beneficiary}`);
-          continue;
-        }
+      for (const [index, row] of rows.entries()) {
+        const beneficiary = await findOrCreateBeneficiary(beneficiaries, row.beneficiary, row.blk, index);
 
         await createArbLog({
           packing_date: packingDate,
@@ -738,8 +822,10 @@ function NewArbLogDialog({ open, onOpenChange, user }: { open: boolean; onOpenCh
             w14: parseInt(c.w14) || 0,
           })),
         });
+        savedCount += 1;
       }
-      toast.success("ARB logs saved!");
+      await onSaved();
+      toast.success(`${savedCount} ARB log${savedCount === 1 ? "" : "s"} saved!`);
       onOpenChange(false);
       setRows([{ ...empty, carreros: [emptyCarrero()] }]);
       setPackingDate(new Date().toISOString().slice(0, 10));
@@ -859,7 +945,7 @@ function NewArbLogDialog({ open, onOpenChange, user }: { open: boolean; onOpenCh
   );
 }
 
-function NewDailyBoxesDialog({ open, onOpenChange, user }: { open: boolean; onOpenChange: (o: boolean) => void; user: User }) {
+function NewDailyBoxesDialog({ open, onOpenChange, user, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; user: User; onSaved: () => Promise<void> }) {
   const today = new Date().toISOString().slice(0, 10);
   const [packingDate, setPackingDate] = useState(today);
   const [firstBox, setFirstBox] = useState("");
@@ -883,6 +969,7 @@ function NewDailyBoxesDialog({ open, onOpenChange, user }: { open: boolean; onOp
         recorded_by: parseInt(user.id),
       });
       toast.success("Daily boxes saved!");
+      await onSaved();
       onOpenChange(false);
       // Reset form
       setPackingDate(today);
@@ -992,7 +1079,7 @@ function NewDailyBoxesDialog({ open, onOpenChange, user }: { open: boolean; onOp
   );
 }
 
-function NewDailyPerBeneficiaryDialog({ open, onOpenChange, user }: { open: boolean; onOpenChange: (o: boolean) => void; user: User }) {
+function NewDailyPerBeneficiaryDialog({ open, onOpenChange, user, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; user: User; onSaved: () => Promise<void> }) {
   const today = new Date().toISOString().slice(0, 10);
   const emptyRow = () => ({
     sub: "", name: "", stems: "",
@@ -1016,16 +1103,10 @@ function NewDailyPerBeneficiaryDialog({ open, onOpenChange, user }: { open: bool
 
     try {
       const beneficiaries = await fetchBeneficiaries();
+      let savedCount = 0;
 
-      for (const row of filledRows) {
-        const beneficiary = beneficiaries.find(
-          b => b.full_name.toLowerCase().includes(row.name.toLowerCase())
-        );
-
-        if (!beneficiary) {
-          toast.error(`Beneficiary not found: ${row.name}`);
-          continue;
-        }
+      for (const [index, row] of filledRows.entries()) {
+        const beneficiary = await findOrCreateBeneficiary(beneficiaries, row.name, undefined, index);
 
         await createProductionRecord({
           packing_date: packingDate,
@@ -1041,8 +1122,10 @@ function NewDailyPerBeneficiaryDialog({ open, onOpenChange, user }: { open: bool
           class_b_d: 0,
           recorded_by: parseInt(user.id),
         });
+        savedCount += 1;
       }
-      toast.success("Production records saved!");
+      await onSaved();
+      toast.success(`${savedCount} production record${savedCount === 1 ? "" : "s"} saved!`);
       onOpenChange(false);
       setRows(Array.from({ length: 5 }, emptyRow));
       setPackingDate(today);
@@ -1141,144 +1224,3 @@ function NewDailyPerBeneficiaryDialog({ open, onOpenChange, user }: { open: bool
     </Dialog>
   );
 }
-
-function NewHarvestParameterDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const matrixRows = [
-    "CUTTING GRP.", "CREW SIZE", "MANHOURS", "STEM CUT", "FARM REJECTS",
-    "AVE. FINGERLENGTH", "AVE. HANDCLASS", "AVE. STEM WEIGHT", "% AREA COVERED",
-    "AVE. CALIBRATION", "CALIBRATION BY WEEK",
-    "11 WOF", "12 WOF", "13 WOF", "14 WOF",
-    "COLOR CODE",
-    "11 WOF", "12 WOF", "13 WOF", "14 WOF",
-  ];
-  const ageHeaders = [
-    { age: "11", code: "YW" },
-    { age: "12", code: "DG" },
-    { age: "13", code: "BLL" },
-    { age: "14", code: "DB" },
-  ];
-  const defects = ["Aurora", "Tutor", "Casa", "Tagotongan", "Magolenio", "Garado M", "Casulad"];
-  const defectAges = [
-    { age: "8 WKS", code: "YW" },
-    { age: "9 WKS", code: "DG" },
-    { age: "10 WKS", code: "BLL" },
-    { age: "11 WKS", code: "DB" },
-  ];
-
-  const Cell = () => <td className="border p-0"><Input className="h-8 border-0 rounded-none" /></td>;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-slate-800">
-            <Plus className="h-5 w-5" />New Harvest Parameter Form
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="flex justify-end items-center gap-2">
-            <Label className="text-sky-700">Date:</Label>
-            <Input type="date" defaultValue={today} className="w-44" />
-          </div>
-
-          <div className="border rounded-md">
-            <div className="bg-slate-50 px-4 py-2 flex items-center justify-between border-b">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Boxes className="h-4 w-4 text-sky-600" />Harvest Parameter Matrix
-              </div>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr>
-                    <th className="border p-2 text-left bg-white"></th>
-                    <th className="border p-2 bg-slate-700 text-white" colSpan={ageHeaders.length + 1}>FARM REJECTS (BY AGE)</th>
-                  </tr>
-                  <tr className="bg-slate-50 text-slate-600">
-                    <th className="border p-2"></th>
-                    <th className="border p-1">CODE</th>
-                    {ageHeaders.map((h) => <th key={h.age} className="border p-1">{h.age}</th>)}
-                    <th className="border p-1">TOTAL</th>
-                  </tr>
-                  <tr className="bg-slate-50 text-slate-500">
-                    <th className="border p-1"></th>
-                    <th className="border p-1"></th>
-                    {ageHeaders.map((h) => <th key={`c-${h.age}`} className="border p-1">{h.code}</th>)}
-                    <th className="border p-1"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrixRows.map((label, i) => (
-                    <tr key={i}>
-                      <td className="border p-2 whitespace-nowrap">{label}</td>
-                      <Cell />
-                      {ageHeaders.map((h) => <Cell key={`m-${i}-${h.age}`} />)}
-                      <td className="border p-0 bg-slate-50"><Input className="h-8 border-0 rounded-none" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="border rounded-md">
-            <div className="bg-slate-50 px-4 py-2 flex items-center justify-between border-b">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Boxes className="h-4 w-4 text-sky-600" />Defects Matrix
-              </div>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
-            </div>
-            <div className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sky-700">Defects Entry</span>
-                <Button variant="outline" size="sm"><Plus className="h-4 w-4 mr-1" />Add Row</Button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-600">
-                      <th className="border p-2 text-left">DEFECTS</th>
-                      {defectAges.map((h) => <th key={h.age} className="border p-1">{h.age}</th>)}
-                      <th className="border p-1">TOTAL</th>
-                      <th className="border p-1 w-10"></th>
-                    </tr>
-                    <tr className="bg-slate-50 text-slate-500">
-                      <th className="border p-1"></th>
-                      {defectAges.map((h) => <th key={`dc-${h.age}`} className="border p-1">{h.code}</th>)}
-                      <th className="border p-1"></th>
-                      <th className="border p-1"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {defects.map((d) => (
-                      <tr key={d}>
-                        <td className="border p-2">{d}</td>
-                        {defectAges.map((h) => <Cell key={`d-${d}-${h.age}`} />)}
-                        <td className="border p-0 bg-slate-50"><Input className="h-8 border-0 rounded-none" /></td>
-                        <td className="border p-1 text-center">
-                          <button className="p-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onOpenChange(false)}>
-              <Save className="h-4 w-4 mr-1" />Save Record
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
