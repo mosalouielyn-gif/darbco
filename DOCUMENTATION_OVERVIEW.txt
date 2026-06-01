@@ -1,0 +1,205 @@
+╔══════════════════════════════════════════════════════════════════╗
+║            DARBCO DOCUMENTATION OVERVIEW                         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+📖 WHICH GUIDE SHOULD YOU READ?
+
+┌─────────────────────────────────────────────────────────────────┐
+│ IF YOU ARE...                    │ READ THIS...                 │
+├──────────────────────────────────┼──────────────────────────────┤
+│ Using XAMPP                      │ XAMPP_INSTALLATION.md ⭐     │
+│ Want visual interface            │ XAMPP_INSTALLATION.md ⭐     │
+│ Prefer phpMyAdmin                │ XAMPP_INSTALLATION.md ⭐     │
+│ Don't like command-line          │ XAMPP_INSTALLATION.md ⭐     │
+├──────────────────────────────────┼──────────────────────────────┤
+│ Using standalone MySQL           │ STEP_BY_STEP_INSTALLATION.md │
+│ First time installing DARBCO     │ STEP_BY_STEP_INSTALLATION.md │
+│ Want detailed explanations       │ STEP_BY_STEP_INSTALLATION.md │
+│ Comfortable with command-line    │ STEP_BY_STEP_INSTALLATION.md │
+├──────────────────────────────────┼──────────────────────────────┤
+│ Experienced developer            │ START_HERE.md                │
+│ Familiar with npm & MySQL        │ QUICKSTART.md                │
+│ Want quick setup                 │ QUICKSTART.md                │
+│ Just need command reference      │ START_HERE.md                │
+├──────────────────────────────────┼──────────────────────────────┤
+│ Need checklist format            │ INSTALLATION_CHECKLIST.md    │
+│ Want to verify installation      │ INSTALLATION_CHECKLIST.md    │
+├──────────────────────────────────┼──────────────────────────────┤
+│ Having npm issues                │ NPM_SETUP.md                 │
+│ Package manager questions        │ NPM_SETUP.md                 │
+├──────────────────────────────────┼──────────────────────────────┤
+│ Want complete documentation      │ README.md                    │
+│ Need API reference               │ README.md                    │
+│ Looking for all features         │ README.md                    │
+└──────────────────────────────────┴──────────────────────────────┘
+
+📚 ALL AVAILABLE GUIDES:
+
+🌟 INSTALLATION GUIDES:
+  1. XAMPP_INSTALLATION.md         ← Using XAMPP + phpMyAdmin ⭐ EASIEST
+  2. STEP_BY_STEP_INSTALLATION.md  ← Using standalone MySQL (detailed)
+  3. QUICKSTART.md                 ← Fast 5-step, for experienced
+  4. INSTALLATION_CHECKLIST.md     ← Checklist format
+  5. START_HERE.md                 ← Quick overview + guide
+
+📖 MAIN DOCUMENTATION:
+  5. README.md                     ← Complete system documentation
+  6. DOCS_INDEX.md                 ← Documentation index
+
+🔧 TECHNICAL GUIDES:
+  7. NPM_SETUP.md                  ← Everything about npm
+  8. NPM_CONVERSION.md             ← npm configuration details
+  9. MIGRATION_SUMMARY.md          ← PHP to Node.js migration
+
+📋 WHAT EACH GUIDE COVERS:
+
+XAMPP_INSTALLATION.md (60 minutes read) ⭐ RECOMMENDED
+  ✓ Installing XAMPP (easier than MySQL)
+  ✓ Using phpMyAdmin (visual interface)
+  ✓ Creating database via phpMyAdmin
+  ✓ Importing data (drag & drop)
+  ✓ Configuring for XAMPP (no password!)
+  ✓ Managing database visually
+  ✓ Daily usage with XAMPP
+  ✓ Backup/restore via phpMyAdmin
+  ✓ Viewing data in tables
+  ✓ No command-line MySQL needed
+
+STEP_BY_STEP_INSTALLATION.md (90 minutes read)
+  ✓ Installing Node.js with screenshots descriptions
+  ✓ Installing MySQL with screenshots descriptions
+  ✓ Downloading the project
+  ✓ Installing dependencies (explained)
+  ✓ Creating database (step by step)
+  ✓ Importing data (with verification)
+  ✓ Configuring environment (detailed)
+  ✓ Running the application
+  ✓ Using the database
+  ✓ Sample workflows
+  ✓ Troubleshooting
+  ✓ Quick reference card
+
+QUICKSTART.md (5 minutes read)
+  ✓ Prerequisites
+  ✓ 5-step installation
+  ✓ Configuration
+  ✓ Test accounts
+  ✓ Basic troubleshooting
+
+START_HERE.md (2 minutes read)
+  ✓ What is DARBCO
+  ✓ Technology stack
+  ✓ Quick start (5 steps)
+  ✓ Common commands
+  ✓ Documentation links
+
+README.md (15 minutes read)
+  ✓ Full feature list
+  ✓ Tech stack
+  ✓ Installation
+  ✓ Configuration
+  ✓ API endpoints
+  ✓ User roles
+  ✓ Project structure
+  ✓ Production deployment
+
+NPM_SETUP.md (10 minutes read)
+  ✓ Why npm
+  ✓ Verifying installation
+  ✓ Installing dependencies
+  ✓ npm commands
+  ✓ Troubleshooting npm
+  ✓ Scripts reference
+
+🎯 RECOMMENDED READING ORDER:
+
+For Beginners (Using XAMPP - EASIEST):
+  1. START_HERE.md (overview)
+  2. XAMPP_INSTALLATION.md (installation) ⭐
+  3. README.md (full documentation)
+  4. NPM_SETUP.md (if npm issues)
+
+For Beginners (Using Standalone MySQL):
+  1. START_HERE.md (overview)
+  2. STEP_BY_STEP_INSTALLATION.md (installation)
+  3. README.md (full documentation)
+  4. NPM_SETUP.md (if npm issues)
+
+For Experienced Users:
+  1. START_HERE.md (overview)
+  2. QUICKSTART.md (installation)
+  3. README.md (reference)
+
+⚡ QUICK COMMANDS:
+
+# Install everything
+npm run install:all
+
+# Create database
+mysql -u root -p -e "CREATE DATABASE darbco;"
+mysql -u root -p darbco < database/darbco.sql
+
+# Configure
+Edit: server/.env (add MySQL password)
+
+# Run
+npm run dev
+
+# Open
+http://localhost:5173
+
+# Login
+admin@darbco.local / password
+
+🆘 NEED HELP?
+
+Problem              → Solution Guide
+─────────────────────────────────────────────────
+Can't install        → STEP_BY_STEP_INSTALLATION.md Part 3
+npm errors           → NPM_SETUP.md Troubleshooting
+Database issues      → STEP_BY_STEP_INSTALLATION.md Part 4
+Login fails          → STEP_BY_STEP_INSTALLATION.md Part 9
+Won't start          → QUICKSTART.md Troubleshooting
+Port conflicts       → STEP_BY_STEP_INSTALLATION.md Part 9
+
+📞 WHERE TO FIND SPECIFIC INFO:
+
+Test accounts        → START_HERE.md, QUICKSTART.md
+Database tables      → STEP_BY_STEP_INSTALLATION.md Part 7
+API endpoints        → README.md
+User roles           → STEP_BY_STEP_INSTALLATION.md Part 7
+Sample data          → STEP_BY_STEP_INSTALLATION.md Part 7
+Workflows            → STEP_BY_STEP_INSTALLATION.md Part 7
+npm scripts          → NPM_SETUP.md, NPM_CONVERSION.md
+Environment config   → STEP_BY_STEP_INSTALLATION.md Part 5
+Production deploy    → README.md Building for Production
+
+✨ QUICK START (IF YOU KNOW WHAT YOU'RE DOING):
+
+Using XAMPP:
+  1. npm run install:all
+  2. Open http://localhost/phpmyadmin
+  3. Create database: darbco
+  4. Import database/darbco.sql via phpMyAdmin
+  5. Leave DB_PASS= empty in server/.env
+  6. npm run dev
+  7. Open http://localhost:5173
+  8. Login: admin@darbco.local / password
+
+Using Standalone MySQL:
+  1. npm run install:all
+  2. mysql -u root -p darbco < database/darbco.sql
+  3. Edit server/.env with MySQL password
+  4. npm run dev
+  5. Open http://localhost:5173
+  6. Login: admin@darbco.local / password
+
+🎓 NOT SURE? START HERE:
+
+→ XAMPP_INSTALLATION.md ⭐ (EASIEST - No command-line!)
+
+OR
+
+→ STEP_BY_STEP_INSTALLATION.md (Detailed with MySQL)
+
+═══════════════════════════════════════════════════════════════════

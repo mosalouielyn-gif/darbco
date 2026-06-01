@@ -1,0 +1,65 @@
+USE darbco;
+
+INSERT IGNORE INTO roles (code, label) VALUES
+  ('manager_admin', 'Manager / Admin');
+
+UPDATE users
+SET role_id = (SELECT id FROM roles WHERE code = 'manager_admin')
+WHERE email = 'admin@darbco.local';
+
+UPDATE users
+SET role_id = (SELECT id FROM roles WHERE code = 'manager_admin')
+WHERE role_id = (SELECT id FROM roles WHERE code = 'admin' LIMIT 1);
+
+DELETE FROM users WHERE email = 'manager@darbco.local';
+DELETE FROM roles WHERE code = 'admin';
+
+ALTER TABLE production_records
+  ADD COLUMN IF NOT EXISTS record_no VARCHAR(40) NULL UNIQUE AFTER id,
+  ADD COLUMN IF NOT EXISTS harvest_date DATE NULL AFTER record_no,
+  ADD COLUMN IF NOT EXISTS harvester_name VARCHAR(120) NULL AFTER beneficiary_id,
+  ADD COLUMN IF NOT EXISTS buligs_total INT UNSIGNED NOT NULL DEFAULT 0 AFTER stems_cut,
+  ADD COLUMN IF NOT EXISTS buligs_11w INT UNSIGNED NOT NULL DEFAULT 0 AFTER buligs_total,
+  ADD COLUMN IF NOT EXISTS buligs_12w INT UNSIGNED NOT NULL DEFAULT 0 AFTER buligs_11w,
+  ADD COLUMN IF NOT EXISTS buligs_13w INT UNSIGNED NOT NULL DEFAULT 0 AFTER buligs_12w,
+  ADD COLUMN IF NOT EXISTS buligs_14w INT UNSIGNED NOT NULL DEFAULT 0 AFTER buligs_13w,
+  ADD COLUMN IF NOT EXISTS class_a_big_hands INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_a_hands,
+  ADD COLUMN IF NOT EXISTS class_a_small_hands INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_a_big_hands,
+  ADD COLUMN IF NOT EXISTS class_a_cps INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_a_small_hands,
+  ADD COLUMN IF NOT EXISTS class_b_total INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_a_fp,
+  ADD COLUMN IF NOT EXISTS class_b_big_hands INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_b_total,
+  ADD COLUMN IF NOT EXISTS class_b_small_hands INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_b_big_hands,
+  ADD COLUMN IF NOT EXISTS class_b_cps INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_b_small_hands,
+  ADD COLUMN IF NOT EXISTS special_total INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_b_d,
+  ADD COLUMN IF NOT EXISTS defects_11w INT UNSIGNED NOT NULL DEFAULT 0 AFTER special_total,
+  ADD COLUMN IF NOT EXISTS defects_12w INT UNSIGNED NOT NULL DEFAULT 0 AFTER defects_11w,
+  ADD COLUMN IF NOT EXISTS defects_13w INT UNSIGNED NOT NULL DEFAULT 0 AFTER defects_12w,
+  ADD COLUMN IF NOT EXISTS defects_14w INT UNSIGNED NOT NULL DEFAULT 0 AFTER defects_13w,
+  ADD COLUMN IF NOT EXISTS rejects_11w INT UNSIGNED NOT NULL DEFAULT 0 AFTER defects_14w,
+  ADD COLUMN IF NOT EXISTS rejects_12w INT UNSIGNED NOT NULL DEFAULT 0 AFTER rejects_11w,
+  ADD COLUMN IF NOT EXISTS rejects_13w INT UNSIGNED NOT NULL DEFAULT 0 AFTER rejects_12w,
+  ADD COLUMN IF NOT EXISTS rejects_14w INT UNSIGNED NOT NULL DEFAULT 0 AFTER rejects_13w,
+  ADD COLUMN IF NOT EXISTS status ENUM('Draft','Submitted','Returned','Verified','Used in Payroll') NOT NULL DEFAULT 'Submitted' AFTER rejects_14w;
+
+ALTER TABLE payroll_batches
+  MODIFY COLUMN status ENUM('Draft','Submitted','Validated','Returned','Approved','Rejected','Released') NOT NULL DEFAULT 'Draft',
+  ADD COLUMN IF NOT EXISTS validated_by INT UNSIGNED NULL AFTER prepared_by,
+  ADD COLUMN IF NOT EXISTS validated_at DATETIME NULL AFTER validated_by,
+  ADD COLUMN IF NOT EXISTS return_reason VARCHAR(255) NULL AFTER approved_at;
+
+ALTER TABLE payroll_slips
+  ADD COLUMN IF NOT EXISTS slip_no VARCHAR(40) NULL UNIQUE AFTER id,
+  ADD COLUMN IF NOT EXISTS production_record_id BIGINT UNSIGNED NULL AFTER beneficiary_id,
+  ADD COLUMN IF NOT EXISTS payroll_period VARCHAR(80) NULL AFTER production_record_id,
+  ADD COLUMN IF NOT EXISTS harvest_date DATE NULL AFTER payroll_period,
+  ADD COLUMN IF NOT EXISTS class_a_boxes INT UNSIGNED NOT NULL DEFAULT 0 AFTER harvest_date,
+  ADD COLUMN IF NOT EXISTS class_b_boxes INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_a_boxes,
+  ADD COLUMN IF NOT EXISTS special_boxes INT UNSIGNED NOT NULL DEFAULT 0 AFTER class_b_boxes,
+  ADD COLUMN IF NOT EXISTS class_a_price DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER special_boxes,
+  ADD COLUMN IF NOT EXISTS class_b_price DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER class_a_price,
+  ADD COLUMN IF NOT EXISTS special_price DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER class_b_price,
+  ADD COLUMN IF NOT EXISTS material_deduction DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER special_price,
+  ADD COLUMN IF NOT EXISTS previous_balance DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER material_deduction,
+  ADD COLUMN IF NOT EXISTS labor_cost DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER previous_balance,
+  ADD COLUMN IF NOT EXISTS other_deductions DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER labor_cost,
+  ADD COLUMN IF NOT EXISTS total_deductions DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER credit_deduction;

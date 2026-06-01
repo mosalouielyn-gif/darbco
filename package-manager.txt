@@ -1,0 +1,6 @@
+This project uses npm.
+
+When you clone this repository, run:
+  npm run install:all
+
+Do not use pnpm or yarn.
